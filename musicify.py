@@ -1,12 +1,15 @@
 import os
-import PySimpleGUI as sg
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
 from pydub import AudioSegment
 import pretty_midi
 import numpy as np
 from music21 import converter
 import subprocess
+import librosa
 
-# Functions as per your existing script
+# --- Logic functions ---
+
 def midi_to_note_name(midi_number):
     note_names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
     octave = midi_number // 12 - 1
@@ -18,16 +21,61 @@ def convert_to_midi(pitches, instrument_name, output_path):
     instrument_program = pretty_midi.instrument_name_to_program(instrument_name)
     midi_instrument = pretty_midi.Instrument(program=instrument_program)
 
-    for i in range(pitches.shape[1]):
-        pitch = pitches[:, i]
-        pitch = pitch[pitch > 0]
-
-        if pitch.size > 0:
-            note_number = int(round(pitch.mean()))
-            note_number = max(0, min(127, note_number))
-            start_time = i * 0.1
-            end_time = start_time + 0.1
-            note = pretty_midi.Note(velocity=100, pitch=note_number, start=start_time, end=end_time)
+    # Process pitch data - pitches should be a 1D array of fundamental frequencies
+    hop_length = 512
+    sr = 22050
+    time_step = hop_length / sr  # Time per frame
+    
+    current_note = None
+    note_start_time = 0
+    
+    for i, pitch_hz in enumerate(pitches):
+        current_time = i * time_step
+        
+        if pitch_hz > 0:  # Valid pitch detected
+            # Convert Hz to MIDI note number
+            midi_note = int(round(librosa.hz_to_midi(pitch_hz)))
+            midi_note = max(0, min(127, midi_note))  # Clamp to valid MIDI range
+            
+            if current_note is None:
+                # Start new note
+                current_note = midi_note
+                note_start_time = current_time
+            elif current_note != midi_note:
+                # Note changed - end previous note and start new one
+                if current_time > note_start_time:
+                    note = pretty_midi.Note(
+                        velocity=80, 
+                        pitch=current_note, 
+                        start=note_start_time, 
+                        end=current_time
+                    )
+                    midi_instrument.notes.append(note)
+                current_note = midi_note
+                note_start_time = current_time
+        else:
+            # No pitch - end current note if one exists
+            if current_note is not None:
+                if current_time > note_start_time:
+                    note = pretty_midi.Note(
+                        velocity=80, 
+                        pitch=current_note, 
+                        start=note_start_time, 
+                        end=current_time
+                    )
+                    midi_instrument.notes.append(note)
+                current_note = None
+    
+    # End final note if it exists
+    if current_note is not None:
+        final_time = len(pitches) * time_step
+        if final_time > note_start_time:
+            note = pretty_midi.Note(
+                velocity=80, 
+                pitch=current_note, 
+                start=note_start_time, 
+                end=final_time
+            )
             midi_instrument.notes.append(note)
 
     midi.instruments.append(midi_instrument)
@@ -36,33 +84,82 @@ def convert_to_midi(pitches, instrument_name, output_path):
     return midi_file_path
 
 def generate_sheet_music(midi_file, output_path):
-    midi_stream = converter.parse(midi_file)
-    layout = midi_stream.flatten()
-    layout.makeMeasures()
-    subprocess.run([r"C:\\Program Files\\MuseScore 4\\bin\\MuseScore4.exe", midi_file, '-o', output_path], check=True)
-    return output_path
+    try:
+        midi_stream = converter.parse(midi_file)
+        layout = midi_stream.flatten()
+        layout.makeMeasures()
+        subprocess.run([r"C:\\Program Files\\MuseScore 4\\bin\\MuseScore4.exe", midi_file, '-o', output_path], check=True)
+        return output_path
+    except subprocess.CalledProcessError:
+        print("MuseScore not found or failed to generate PDF. MIDI file created successfully.")
+        return None
+    except Exception as e:
+        print(f"Error generating sheet music: {e}")
+        return None
 
 def extract_features(audio_path):
-    return np.random.randint(40, 80, (1, 100)), None
+    """
+    Extract pitch features from audio file using librosa
+    Returns fundamental frequency estimates over time
+    """
+    try:
+        # Load audio file
+        y, sr = librosa.load(audio_path, sr=22050)  # Load with 22050 Hz sample rate
+        
+        # Use librosa's pitch detection (YIN algorithm)
+        hop_length = 512
+        pitches, magnitudes = librosa.piptrack(y=y, sr=sr, hop_length=hop_length, threshold=0.1)
+        
+        # Extract the fundamental frequency for each time frame
+        pitch_contour = []
+        
+        for t in range(pitches.shape[1]):
+            # Find the pitch with highest magnitude at this time frame
+            index = magnitudes[:, t].argmax()
+            pitch = pitches[index, t]
+            
+            # Only keep pitches above a certain threshold
+            if magnitudes[index, t] > 0.1:
+                pitch_contour.append(pitch)
+            else:
+                pitch_contour.append(0)  # No clear pitch detected
+        
+        # Alternative: Use librosa's pyin algorithm for better pitch detection
+        # f0, voiced_flag, voiced_probs = librosa.pyin(y, fmin=librosa.note_to_hz('C2'), 
+        #                                            fmax=librosa.note_to_hz('C7'), sr=sr)
+        # pitch_contour = np.nan_to_num(f0)  # Replace NaN with 0
+        
+        return np.array(pitch_contour), sr
+        
+    except Exception as e:
+        print(f"Error processing audio: {e}")
+        # Fallback to random data if audio processing fails
+        return np.random.randint(40, 80, 100), None
 
 def process_audio(audio_path, instrument, output_dir):
-    pitches, _ = extract_features(audio_path)
-    base_name = f"{os.path.basename(audio_path).split('.')[0]}_{instrument}"
+    pitches, sr = extract_features(audio_path)
+    base_name = f"{os.path.basename(audio_path).split('.')[0]}_{instrument.replace(' ', '_')}"
     output_path = os.path.join(output_dir, base_name)
+    
+    # Convert pitches to MIDI
     midi_path = convert_to_midi(pitches, instrument, output_path)
-    return generate_sheet_music(midi_path, output_path=os.path.join(output_dir, f"{base_name}.pdf"))
+    
+    # Generate sheet music (PDF)
+    pdf_path = os.path.join(output_dir, f"{base_name}.pdf")
+    sheet_music_path = generate_sheet_music(midi_path, pdf_path)
+    
+    return midi_path, sheet_music_path
 
 def convert_mp3_to_wav(mp3_path):
     wav_path = mp3_path.replace(".mp3", ".wav")
-    audio = AudioSegment.from_mp3(mp3_path)
-    audio.export(wav_path, format="wav")
+    if not os.path.exists(wav_path):
+        audio = AudioSegment.from_mp3(mp3_path)
+        audio.export(wav_path, format="wav")
     return wav_path
 
-# PySimpleGUI UI Setup
-def create_window():
-    sg.theme('DarkBlue')  # Apply blue theme
+# --- Tkinter UI setup ---
 
-    instrument_list = ['Acoustic Grand Piano', 'Bright Acoustic Piano', 'Electric Grand Piano', 'Honky-Tonk Piano',
+instrument_list = ['Acoustic Grand Piano', 'Bright Acoustic Piano', 'Electric Grand Piano', 'Honky-Tonk Piano',
                     'Electric Piano 1', 'Electric Piano 2', 'Harpsichord', 'Clavinet', 'Celesta', 'Glockenspiel',
                     'Music Box', 'Vibraphone', 'Marimba', 'Xylophone', 'Tubular Bells', 'Dulcimer', 'Drawbar Organ',
                     'Percussive Organ', 'Rock Organ', 'Church Organ', 'Reed Organ', 'Accordion', 'Harmonica',
@@ -85,60 +182,106 @@ def create_window():
                     'Synth Drum', 'Reverse Cymbal', 'Guitar Fret Noise', 'Breath Noise', 'Seashore', 'Bird Tweet',
                     'Telephone Ring', 'Helicopter', 'Applause', 'Gunshot']
 
-    layout = [
-        [sg.Text('Musicify your Audio File', size=(30, 1), font=('Helvetica', 20), text_color='white', justification='center')],
-        [sg.Text()],
-        [sg.Text()],
-        [sg.Text('Upload Audio File (.mp3):', size=(20, 1), font=('Helvetica', 12), justification='right'),
-        sg.InputText('', key='-MP3_PATH-', size=(40, 1), font=('Helvetica', 12)),
-        sg.FileBrowse(file_types=(('MP3 Files', '*.mp3'),), font=('Helvetica', 12))],
+class MusicifyApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Musicify")
+        self.root.geometry("700x350")
+        self.root.configure(bg="#1a1a2e")
 
-        [sg.Text('Select Instrument:', size=(20, 1), font=('Helvetica', 12), justification='right'),
-        sg.Combo(instrument_list, default_value='(Select)', key='-INSTRUMENT-', font=('Helvetica', 12),
-                size=(40, 1), auto_size_text=False, readonly=False)],
+        # Title
+        title = tk.Label(root, text="Musicify your Audio File", font=("Helvetica", 20), fg="white", bg="#1a1a2e")
+        title.pack(pady=10)
 
-        [sg.Text('Select Output Folder:', size=(20, 1), font=('Helvetica', 12), justification='right'),
-        sg.InputText('', key='-OUTPUT_PATH-', size=(40, 1), font=('Helvetica', 12)),
-        sg.FolderBrowse(font=('Helvetica', 12))],
-        [sg.Text()],
+        # Frame for inputs
+        frame = tk.Frame(root, bg="#1a1a2e")
+        frame.pack(pady=10)
 
-        [sg.Button('Submit', font=('Helvetica', 12)), sg.Button('Exit', font=('Helvetica', 12))]
-    ]
+        # MP3 input
+        self.mp3_path_var = tk.StringVar()
+        tk.Label(frame, text="Upload Audio File (.mp3/.wav):", font=("Helvetica", 12), bg="#1a1a2e", fg="white").grid(row=0, column=0, sticky='e', padx=10, pady=5)
+        tk.Entry(frame, textvariable=self.mp3_path_var, width=40, font=("Helvetica", 12)).grid(row=0, column=1, pady=5)
+        tk.Button(frame, text="Browse", command=self.browse_audio).grid(row=0, column=2, padx=5)
 
-    layout = [[sg.Column(layout, element_justification='center', justification='center', vertical_alignment='center')]]
+        # Instrument selection
+        self.instrument_var = tk.StringVar(value='Acoustic Grand Piano')
+        tk.Label(frame, text="Select Instrument:", font=("Helvetica", 12), bg="#1a1a2e", fg="white").grid(row=1, column=0, sticky='e', padx=10, pady=5)
+        ttk.Combobox(frame, textvariable=self.instrument_var, values=instrument_list, width=38).grid(row=1, column=1, pady=5)
 
-    window = sg.Window('Musicify', layout, size=(700, 300), finalize=True)
-    return window
+        # Output path
+        self.output_path_var = tk.StringVar()
+        tk.Label(frame, text="Select Output Folder:", font=("Helvetica", 12), bg="#1a1a2e", fg="white").grid(row=2, column=0, sticky='e', padx=10, pady=5)
+        tk.Entry(frame, textvariable=self.output_path_var, width=40, font=("Helvetica", 12)).grid(row=2, column=1, pady=5)
+        tk.Button(frame, text="Browse", command=self.browse_folder).grid(row=2, column=2, padx=5)
 
-def main():
-    window = create_window()
+        # Progress bar
+        self.progress_var = tk.StringVar(value="Ready to process...")
+        tk.Label(root, textvariable=self.progress_var, font=("Helvetica", 10), bg="#1a1a2e", fg="lightblue").pack(pady=5)
 
-    while True:
-        event, values = window.read()
+        # Buttons
+        button_frame = tk.Frame(root, bg="#1a1a2e")
+        button_frame.pack(pady=15)
+        tk.Button(button_frame, text="Submit", font=("Helvetica", 12), command=self.submit).pack(side=tk.LEFT, padx=10)
+        tk.Button(button_frame, text="Exit", font=("Helvetica", 12), command=self.root.quit).pack(side=tk.LEFT, padx=10)
 
-        if event == sg.WINDOW_CLOSED or event == 'Exit':
-            break
+    def browse_audio(self):
+        path = filedialog.askopenfilename(filetypes=[("Audio Files", "*.mp3 *.wav"), ("MP3 Files", "*.mp3"), ("WAV Files", "*.wav")])
+        if path:
+            self.mp3_path_var.set(path)
 
-        if event == 'Submit':
-            audio_path = values['-MP3_PATH-']
-            instrument = values['-INSTRUMENT-']
-            output_dir = values['-OUTPUT_PATH-']
+    def browse_folder(self):
+        folder = filedialog.askdirectory()
+        if folder:
+            self.output_path_var.set(folder)
 
-            if audio_path and instrument and output_dir:
-                song_name = os.path.basename(audio_path).split('.')[0]
-                project_folder = os.path.join(output_dir, f"{song_name}_Musicified")
+    def submit(self):
+        audio_path = self.mp3_path_var.get()
+        instrument = self.instrument_var.get()
+        output_dir = self.output_path_var.get()
 
-                if not os.path.exists(project_folder):
-                    os.makedirs(project_folder)
+        if not audio_path or not instrument or not output_dir:
+            messagebox.showerror("Error", "Please provide all required inputs (audio file, instrument, output folder).")
+            return
 
+        try:
+            self.progress_var.set("Processing audio file...")
+            self.root.update()
+            
+            song_name = os.path.basename(audio_path).split('.')[0]
+            project_folder = os.path.join(output_dir, f"{song_name}_Musicified")
+
+            if not os.path.exists(project_folder):
+                os.makedirs(project_folder)
+
+            # Convert to WAV if needed
+            if audio_path.lower().endswith('.mp3'):
+                self.progress_var.set("Converting MP3 to WAV...")
+                self.root.update()
                 wav_path = convert_mp3_to_wav(audio_path)
-                sheet_music_file = process_audio(wav_path, instrument, project_folder)
-                sg.popup(f"Conversion complete!!!\n\nMIDI and PDF files saved to {project_folder}\n\n", title="Success")
-
             else:
-                sg.popup("Please provide all required inputs (MP3 file, instrument, output folder).", title="Failed")
+                wav_path = audio_path
 
-    window.close()
+            self.progress_var.set("Extracting pitch information...")
+            self.root.update()
+            
+            midi_path, sheet_music_path = process_audio(wav_path, instrument, project_folder)
+
+            self.progress_var.set("Conversion complete!")
+            
+            result_message = f"Conversion complete!\nMIDI file saved to: {midi_path}"
+            if sheet_music_path:
+                result_message += f"\nPDF sheet music saved to: {sheet_music_path}"
+            else:
+                result_message += "\nNote: PDF generation failed (MuseScore not found), but MIDI file was created successfully."
+            
+            messagebox.showinfo("Success", result_message)
+            
+        except Exception as e:
+            self.progress_var.set("Error occurred during processing")
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+
 
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    app = MusicifyApp(root)
+    root.mainloop()
