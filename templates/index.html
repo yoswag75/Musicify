@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Musicify Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/opensheetmusicdisplay@1.8.9/build/opensheetmusicdisplay.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Quicksand', sans-serif; 
+            /* Deep, dark twilight/midnight blue background */
+            background: linear-gradient(135deg, #02040a, #0a1128, #030512); 
+            background-attachment: fixed;
+            color: #e0f2fe; 
+        scroll-behavior: smooth; 
+    }
+    
+    /* Floating Music Notes Animation for Background */
+    @keyframes float {
+        0% { transform: translateY(0px) rotate(0deg); opacity: 0.03; }
+        50% { transform: translateY(-30px) rotate(15deg); opacity: 0.12; }
+        100% { transform: translateY(0px) rotate(0deg); opacity: 0.03; }
+    }
+    .float-note { position: absolute; color: #0ea5e9; animation: float 8s ease-in-out infinite; }
+    .delay-1 { animation-delay: 1.5s; animation-duration: 9s; }
+    .delay-2 { animation-delay: 3s; animation-duration: 7s; }
+    .delay-3 { animation-delay: 0.5s; animation-duration: 10s; }
+
+    /* Glassmorphism utilities for main cards */
+    .glass-card { 
+        background: rgba(10, 17, 40, 0.6); 
+            backdrop-filter: blur(16px); 
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(14, 165, 233, 0.1); 
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
+        .glass-panel {
+            background: rgba(2, 4, 10, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(14, 165, 233, 0.1);
+        }
+
+        .input-bg { background-color: rgba(0, 0, 0, 0.2); border: 1px solid rgba(14, 165, 233, 0.2); color: #E0E0E0; }
+        .input-bg:hover { background-color: rgba(14, 165, 233, 0.05); }
+        
+        /* Authentic warm paper tone for sheet music */
+        #osmd-container { background-color: #FCFbf7; border-radius: 12px; padding: 20px; min-height: 500px; color: black; position: relative; }
+        
+        .loader { border: 4px solid rgba(14, 165, 233, 0.2); border-top: 4px solid #0ea5e9; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Modern Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(14, 165, 233, 0.4); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(14, 165, 233, 0.8); }
+
+        /* Custom Range Slider Styles */
+        .custom-range {
+            -webkit-appearance: none;
+            appearance: none;
+            outline: none;
+        }
+        .custom-range::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #fff;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(14, 165, 233, 0.8);
+            border: 2px solid #0ea5e9;
+            transition: transform 0.1s ease;
+        }
+        .custom-range::-webkit-slider-thumb:hover {
+            transform: scale(1.3);
+        }
+        .custom-range::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            background: #fff;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(14, 165, 233, 0.8);
+            border: 2px solid #0ea5e9;
+            transition: transform 0.1s ease;
+        }
+        .custom-range::-moz-range-thumb:hover {
+            transform: scale(1.3);
+        }
+        
+        select option {
+            background-color: #02040a;
+            color: #e0f2fe;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-start justify-center p-4 md:p-8 relative">
+
+    <!-- Global Action Blocker Overlay (Replaced by Progress Modal) -->
+    <div id="blockingOverlay" class="hidden fixed inset-0 z-[9999] bg-[#02040a]/90 backdrop-blur-md flex items-center justify-center transition-all duration-300">
+        <div class="glass-card p-8 rounded-3xl max-w-md w-full text-center border border-cyan-500/20 shadow-[0_0_50px_rgba(14,165,233,0.15)]">
+            <div class="relative w-24 h-24 mx-auto mb-6">
+                <!-- Outer spinning ring -->
+                <div class="absolute inset-0 border-4 border-cyan-500/20 border-t-cyan-400 rounded-full animate-[spin_2s_linear_infinite]"></div>
+                <!-- Inner spinning ring -->
+                <div class="absolute inset-2 border-4 border-blue-500/20 border-b-blue-400 rounded-full animate-[spin_1.5s_linear_infinite_reverse]"></div>
+                <!-- Center Music Note -->
+                <svg class="absolute inset-0 m-auto w-8 h-8 text-cyan-300 animate-pulse" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+            </div>
+            
+            <h3 class="text-2xl font-bold text-white mb-2" id="progressTitle">Transcribing Audio</h3>
+            
+            <!-- Progress Bar -->
+            <div class="w-full h-3 bg-black/50 rounded-full mb-4 overflow-hidden border border-cyan-900/50">
+                <div id="progressBarFill" class="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full w-0 transition-all duration-500 ease-out relative">
+                    <div class="absolute inset-0 bg-white/20 animate-[pulse_1s_ease-in-out_infinite]"></div>
+                </div>
+            </div>
+            
+            <p id="progressMessage" class="text-cyan-200/80 font-medium h-6 mb-6">Initializing...</p>
+            
+            <button onclick="cancelTranscription()" id="cancelBtn" class="px-6 py-2.5 rounded-full bg-white/5 hover:bg-red-500/20 text-blue-200 hover:text-red-400 border border-white/10 hover:border-red-500/30 transition-all font-bold flex items-center justify-center gap-2 mx-auto w-32">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                Cancel
+            </button>
+        </div>
+    </div>
+
+    <button onclick="exitApp()" class="fixed top-6 left-6 z-50 bg-white/5 hover:bg-red-500/20 text-blue-300 hover:text-red-400 border border-white/10 hover:border-red-500/30 px-5 py-3 rounded-full transition-all shadow-lg backdrop-blur-md group flex items-center gap-3 font-bold text-lg" title="Exit Application">
+        <svg class="w-4 h-4 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+        Exit
+    </button>
+
+    <div class="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
+        <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-cyan-500/5 blur-[120px]"></div>
+        <div class="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-blue-600/10 blur-[120px]"></div>
+        
+        <!-- Cute Floating Music Notes -->
+        <svg class="float-note w-16 h-16 top-[15%] left-[10%]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+        <svg class="float-note delay-1 w-24 h-24 top-[60%] left-[5%]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+        <svg class="float-note delay-2 w-20 h-20 top-[20%] right-[15%]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+        <svg class="float-note delay-3 w-32 h-32 top-[70%] right-[8%]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+    </div>
+
+    <!-- HOME PAGE -->
+    <div id="homePage" class="w-full max-w-4xl mt-2 md:mt-4 fade-in">
+        <div class="mb-4 text-center">
+            <div class="flex items-center justify-center gap-3 mb-2">
+                <!-- Cute Music Icon -->
+                <svg class="w-10 h-10 text-cyan-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                <h1 class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 tracking-tight py-2 leading-tight">Musicify Studio</h1>
+            </div>
+            <p class="text-blue-200/70 text-lg font-medium">Turn your favorite tunes into magical sheet music</p>
+        </div>
+
+        <div class="glass-card rounded-3xl p-5 md:p-6 mb-6 relative z-50">
+            <form id="uploadForm" class="space-y-5">
+                <!-- Cute Drag & Drop Area -->
+                <div>
+                    <label class="block text-sm font-semibold mb-2 text-blue-200 ml-1">What are we listening to?</label>
+                    <div class="relative group cursor-pointer border-2 border-dashed border-cyan-500/30 hover:border-cyan-400 bg-cyan-900/10 rounded-2xl p-6 text-center transition-all overflow-hidden">
+                        <input type="file" id="audioFile" accept="audio/*" required class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                        <div class="relative z-0 pointer-events-none">
+                            <div class="bg-cyan-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform duration-300">
+                                <svg class="w-8 h-8 text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path></svg>
+                            </div>
+                            <p id="file-name-display" class="text-cyan-100 font-bold text-lg">Click to browse or drop an audio file</p>
+                            <p class="text-sm text-cyan-300/60 mt-2 font-medium">Supports .wav & .mp3</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Custom Searchable Dropdown UI -->
+                <div>
+                    <label class="block text-sm font-semibold mb-2 text-blue-200 ml-1">Who's playing it?</label>
+                    <div class="relative w-full" id="custom-select-container">
+                        <input type="hidden" id="instrument" name="instrument" value="Acoustic Grand Piano">
+
+                        <button type="button" id="select-trigger" class="input-bg w-full p-4 rounded-2xl flex justify-between items-center focus:outline-none focus:ring-2 focus:ring-cyan-400 transition-all">
+                            <div class="flex items-center gap-3">
+                                <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                <span id="selected-instrument" class="text-blue-100 font-medium text-lg">Acoustic Grand Piano</span>
+                            </div>
+                            <svg class="w-5 h-5 text-blue-300 transition-transform duration-300" id="select-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+
+                        <div id="dropdown-menu" class="hidden absolute z-50 w-full mt-3 rounded-2xl overflow-hidden flex flex-col max-h-[350px] shadow-2xl bg-[#0a1128] border border-blue-500/30">
+                            <div class="p-3 border-b border-blue-500/20 bg-[#040817] sticky top-0 z-10">
+                                <div class="relative">
+                                    <svg class="w-5 h-5 absolute left-3 top-3 text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                    <input type="text" id="instrument-search" placeholder="Search instruments..." class="w-full bg-black/40 text-white rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 text-sm font-medium transition-all placeholder-blue-300/50" autocomplete="off">
+                                </div>
+                            </div>
+                            <div id="options-list" class="overflow-y-auto custom-scrollbar flex-1 pb-2 pt-1 bg-[#0a1128]"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-center pt-2">
+                    <button type="submit" id="submitBtn" class="w-full sm:w-auto bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-4 px-10 rounded-full shadow-[0_0_20px_rgba(14,165,233,0.3)] hover:shadow-[0_0_30px_rgba(14,165,233,0.5)] transition-all flex items-center justify-center gap-3 transform hover:-translate-y-1">
+                        <svg id="magicWand" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                        <div id="loadingSpinner" class="loader hidden"></div>
+                        <span id="btnText" class="text-lg">Sprinkle Magic & Transcribe</span>
+                    </button>
+                </div>
+            </form>
+            <p id="errorMsg" class="bg-red-500/20 text-red-200 border border-red-500/30 p-4 rounded-xl mt-6 text-center font-medium hidden"></p>
+        </div>
+
+        <div class="flex items-center gap-3 mb-6 ml-2 relative z-10">
+            <svg class="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <h2 class="text-2xl font-bold text-blue-100">Recent Masterpieces</h2>
+        </div>
+        <div id="historyList" class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-12 relative z-10"></div>
+    </div>
+
+    <!-- PLAYER PAGE -->
+    <div id="playerPage" class="w-full max-w-5xl hidden flex-col relative fade-in">
+        <div class="sticky top-0 z-40 glass-panel pt-4 pb-4 mb-6 shadow-xl rounded-b-3xl px-4 md:px-8 -mx-4 md:-mx-8">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4 mb-5">
+                <button onclick="goHome()" class="text-blue-300 hover:text-white flex items-center font-bold bg-white/5 hover:bg-white/10 px-4 py-2 rounded-full transition-all border border-blue-500/20">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                    Back to Studio
+                </button>
+                <div class="flex flex-wrap justify-center gap-3">
+                    <button onclick="triggerDownload(currentData.midi_url, currentData.midi_url.split('/').pop())" class="bg-white/5 hover:bg-white/10 text-cyan-100 px-5 py-2.5 rounded-full text-sm font-bold border border-cyan-500/30 transition-all flex items-center gap-2 shadow-lg">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Get MIDI
+                    </button>
+                    <button id="btnPdf" onclick="triggerDownload(currentData.pdf_url, currentData.pdf_url.split('/').pop())" class="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white px-5 py-2.5 rounded-full text-sm font-bold shadow-lg transition-all flex items-center gap-2 hidden">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        Get PDF
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex flex-col md:flex-row items-center justify-between gap-6 px-2">
+                <div class="flex flex-col text-center md:text-left w-full md:w-auto">
+                    <h2 id="songTitle" class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-300 truncate max-w-[15rem] lg:max-w-xs">Song Title</h2>
+                    <div class="flex items-center justify-center md:justify-start gap-2 mt-1">
+                        <span class="flex h-2 w-2 relative">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+                        </span>
+                        <span id="songBpm" class="text-sm font-bold text-blue-300/80">120 BPM</span>
+                    </div>
+                </div>
+                
+                <!-- Custom Audio Player -->
+                <div class="w-full md:w-[60%] lg:w-1/2 bg-black/40 rounded-2xl p-3 backdrop-blur-md border border-cyan-500/20 shadow-inner flex flex-col gap-2 relative transition-all">
+                    <!-- Hidden Native Audio -->
+                    <audio id="audioPlayer" class="hidden"></audio>
+
+                    <div class="flex items-center justify-between">
+                        <!-- Playback Controls -->
+                        <div class="flex items-center gap-3 md:gap-5">
+                            <!-- Rewind 30s -->
+                            <button id="btnRewind" class="text-cyan-400 hover:text-white transition-colors flex items-center gap-0.5 group focus:outline-none" title="Rewind 30s">
+                                <svg class="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.333 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z"></path></svg>
+                                <span class="text-[10px] font-bold">30s</span>
+                            </button>
+
+                            <!-- Play/Pause Button -->
+                            <button id="btnPlayPause" class="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-full p-2.5 shadow-[0_0_15px_rgba(14,165,233,0.3)] transition-all transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-2 focus:ring-offset-black">
+                                <svg id="iconPlay" class="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                <svg id="iconPause" class="w-5 h-5 hidden" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                            </button>
+
+                            <!-- Forward 30s -->
+                            <button id="btnForward" class="text-cyan-400 hover:text-white transition-colors flex items-center gap-0.5 group focus:outline-none" title="Forward 30s">
+                                <span class="text-[10px] font-bold">30s</span>
+                                <svg class="w-5 h-5 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.334-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.334-4z"></path></svg>
+                            </button>
+                        </div>
+
+                        <div class="flex items-center gap-4">
+                            <!-- Time Display -->
+                            <div class="text-[11px] font-mono text-cyan-200/90 font-medium">
+                                <span id="timeCurrent">0:00</span> <span class="opacity-40">/</span> <span id="timeTotal">0:00</span>
+                            </div>
+                            
+                            <!-- Speed Control -->
+                            <div class="relative">
+                                <select id="playbackSpeed" class="appearance-none bg-black/40 border border-cyan-500/30 text-cyan-100 text-xs font-semibold rounded-lg pl-2 pr-6 py-1 focus:outline-none focus:ring-1 focus:ring-cyan-500 cursor-pointer hover:bg-black/60 hover:border-cyan-400 transition-colors">
+                                    <option value="0.25">0.25x</option>
+                                    <option value="0.5">0.5x</option>
+                                    <option value="0.75">0.75x</option>
+                                    <option value="1" selected>1.0x</option>
+                                    <option value="1.25">1.25x</option>
+                                    <option value="1.5">1.5x</option>
+                                    <option value="1.75">1.75x</option>
+                                    <option value="2">2.0x</option>
+                                </select>
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 text-cyan-400">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Progress Scrubber -->
+                    <div class="w-full flex items-center pt-1 px-1">
+                        <input type="range" id="audioScrubber" value="0" min="0" max="100" step="0.01" class="w-full h-1.5 bg-cyan-950 rounded-lg cursor-pointer custom-range" style="background: linear-gradient(to right, #0ea5e9 0%, #082f49 0%);">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="relative w-full">
+            <div id="sheetLoading" class="hidden absolute inset-0 z-10 flex flex-col justify-center items-center bg-[#02040a]/80 backdrop-blur-sm rounded-xl min-h-[500px]">
+                <div class="loader mb-5 w-12 h-12 border-[5px]"></div>
+                <p class="text-cyan-300 font-bold text-xl tracking-wide">Drawing Sheet Music...</p>
+                <p class="text-blue-300/60 text-sm mt-2 font-medium">Placing every little note perfectly</p>
+            </div>
+            <!-- Warmer, paper-like background for the notes -->
+            <div id="osmd-container" class="shadow-2xl paper-sheet rounded-xl overflow-hidden"></div>
+        </div>
+    </div>
+
+    <!-- Floating Sync Button -->
+    <button id="syncBtn" onclick="resumeSync()" class="fixed bottom-10 right-10 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white px-6 py-4 rounded-full shadow-[0_10px_30px_rgba(14,165,233,0.4)] font-bold flex items-center gap-3 transition-all duration-300 transform translate-y-32 opacity-0 z-50 pointer-events-none hover:scale-105 border border-cyan-400/50">
+        <svg class="w-6 h-6 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
+        Sync to Audio
+    </button>
+
+    <!-- Delete Modal -->
+    <div id="deleteModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/70 fade-in backdrop-blur-md">
+        <div class="glass-card p-8 rounded-3xl shadow-2xl max-w-sm w-full m-4 text-center transform scale-100 transition-transform bg-[#0a1128] border-red-500/20">
+            <div class="bg-red-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5 border border-red-500/30">
+                <svg class="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            </div>
+            <h3 class="text-2xl font-bold text-white mb-2">Delete this track?</h3>
+            <p class="text-blue-200/70 mb-8 font-medium">This will permanently sweep the audio files out of your studio. Cannot be undone!</p>
+            <div class="flex justify-center gap-4">
+                <button onclick="closeDeleteModal()" class="px-6 py-3 rounded-full bg-white/10 hover:bg-white/20 text-white font-bold transition-all w-1/2">Keep it</button>
+                <button onclick="confirmDelete()" class="px-6 py-3 rounded-full bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500 text-white font-bold shadow-lg shadow-red-500/30 transition-all w-1/2">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Musescore Alert Modal -->
+    <div id="musescoreAlert" class="hidden fixed top-6 right-6 z-[100] bg-[#0a1128] border border-orange-500/30 border-l-4 border-l-orange-400 rounded-xl shadow-2xl p-5 flex items-start gap-4 fade-in max-w-sm">
+        <div class="bg-orange-500/20 p-2 rounded-full text-orange-400 border border-orange-500/30">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        </div>
+        <div class="flex-1 mt-0.5">
+            <h4 class="text-white font-bold">MuseScore 4 Not Found</h4>
+            <p class="text-blue-200/70 text-sm mt-1 font-medium">PDF export is disabled. <a href="https://musescore.org/en/download" target="_blank" class="text-cyan-400 underline hover:text-cyan-300">Download MuseScore 4</a> and restart Musicify to enable it!</p>
+        </div>
+        <button onclick="document.getElementById('musescoreAlert').classList.add('hidden')" class="text-gray-400 hover:text-white transition bg-white/5 hover:bg-white/10 p-1.5 rounded-full">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+    </button>
+</div>
+
+<script>
+    function exitApp() {
+        if (window.pywebview && window.pywebview.api) {
+            window.pywebview.api.close_app();
+        } else {
+            window.close(); // Fallback for browser testing
+        }
+    }
+
+    // Update file name display beautifully
+    document.getElementById('audioFile').addEventListener('change', function(e) {
+        const fileName = e.target.files[0]?.name || 'Click to browse or drop an audio file';
+            const display = document.getElementById('file-name-display');
+            display.innerText = fileName;
+            if (e.target.files[0]) {
+                display.classList.add('text-cyan-300');
+                display.classList.remove('text-cyan-100');
+            }
+        });
+
+        // --- CUSTOM DROPDOWN ENGINE ---
+        const instrumentsData = {
+            "Pianos & Keyboards": ["Acoustic Grand Piano", "Bright Acoustic Piano", "Electric Grand Piano", "Honky-Tonk Piano", "Electric Piano 1", "Electric Piano 2", "Harpsichord", "Clavinet", "Celesta"],
+            "Percussion & Mallets": ["Glockenspiel", "Music Box", "Vibraphone", "Marimba", "Xylophone", "Tubular Bells", "Dulcimer", "Timpani", "Orchestra Hit"],
+            "Organs & Accordions": ["Drawbar Organ", "Percussive Organ", "Rock Organ", "Church Organ", "Reed Organ", "Accordion", "Harmonica", "Tango Accordion"],
+            "Guitars & Basses": ["Acoustic Guitar", "Electric Guitar", "Acoustic Bass", "Electric Bass"],
+            "Strings & Orchestral": ["Violin", "Viola", "Cello", "Contrabass", "Tremolo Strings", "Pizzicato Strings", "Orchestral Harp", "String Ensemble 1", "String Ensemble 2", "Synth Strings 1", "Synth Strings 2"],
+            "Choir & Voices": ["Choir Aahs", "Voice Oohs", "Synth Voice"],
+            "Brass": ["Trumpet", "Trombone", "Tuba", "Muted Trumpet", "French Horn", "Brass Section", "Synth Brass 1", "Synth Brass 2"],
+            "Woodwinds": ["Soprano Sax", "Alto Sax", "Tenor Sax", "Baritone Sax", "Oboe", "English Horn", "Bassoon", "Clarinet"],
+            "Flutes & Pipes": ["Piccolo", "Flute", "Recorder", "Pan Flute", "Blown Bottle", "Shakuhachi", "Whistle", "Ocarina"]
+        };
+
+        function initCustomSelect() {
+            const trigger = document.getElementById('select-trigger');
+            const menu = document.getElementById('dropdown-menu');
+            const searchInput = document.getElementById('instrument-search');
+            const listContainer = document.getElementById('options-list');
+            const hiddenInput = document.getElementById('instrument');
+            const selectedText = document.getElementById('selected-instrument');
+            const arrow = document.getElementById('select-arrow');
+
+            let isOpen = false;
+
+            function renderList(filter = '') {
+                listContainer.innerHTML = '';
+                const lowerFilter = filter.toLowerCase();
+                let hasResults = false;
+
+                for (const [category, instruments] of Object.entries(instrumentsData)) {
+                    const filteredInsts = instruments.filter(inst => inst.toLowerCase().includes(lowerFilter));
+
+                    if (filteredInsts.length > 0) {
+                        hasResults = true;
+                        
+                        const header = document.createElement('div');
+                        // High contrast Category headers
+                        header.className = 'px-5 py-2.5 mt-2 text-xs font-bold text-cyan-400 uppercase tracking-widest bg-black/30 select-none';
+                        header.innerText = category;
+                        listContainer.appendChild(header);
+
+                        filteredInsts.forEach(inst => {
+                            const item = document.createElement('div');
+                            const isSelected = inst === hiddenInput.value;
+                            
+                            // Clean, solid contrast for items
+                            item.className = `px-5 py-3 text-sm font-medium cursor-pointer transition-all flex justify-between items-center mx-2 rounded-xl my-0.5 ${isSelected ? 'bg-cyan-600/40 text-white border border-cyan-500/30 shadow-inner' : 'text-gray-200 hover:bg-cyan-900/40 hover:text-white'}`;
+                            
+                            item.innerHTML = `
+                                <span>${inst}</span>
+                                ${isSelected ? '<svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>' : ''}
+                            `;
+
+                            item.onclick = (e) => {
+                                e.stopPropagation();
+                                hiddenInput.value = inst;
+                                selectedText.innerText = inst;
+                                trigger.classList.add('border-cyan-400'); 
+                                setTimeout(() => trigger.classList.remove('border-cyan-400'), 300);
+                                closeMenu();
+                                renderList(); 
+                            };
+                            listContainer.appendChild(item);
+                        });
+                    }
+                }
+                
+                if (!hasResults) {
+                    listContainer.innerHTML = '<div class="px-4 py-8 text-sm text-blue-300/50 text-center flex flex-col items-center font-medium"><svg class="w-10 h-10 mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>No instruments found</div>';
+                }
+            }
+
+            function openMenu() {
+                isOpen = true;
+                menu.classList.remove('hidden');
+                trigger.classList.add('ring-2', 'ring-cyan-400', 'border-transparent', 'bg-white/10');
+                arrow.style.transform = 'rotate(180deg)';
+                searchInput.value = '';
+                renderList();
+                setTimeout(() => searchInput.focus(), 50);
+            }
+
+            function closeMenu() {
+                isOpen = false;
+                menu.classList.add('hidden');
+                trigger.classList.remove('ring-2', 'ring-cyan-400', 'bg-white/10');
+                arrow.style.transform = 'rotate(0deg)';
+            }
+
+            trigger.onclick = () => isOpen ? closeMenu() : openMenu();
+            searchInput.oninput = (e) => renderList(e.target.value);
+
+            document.addEventListener('click', (e) => {
+                if (!trigger.contains(e.target) && !menu.contains(e.target)) {
+                    if (isOpen) closeMenu();
+                }
+            });
+
+            renderList();
+        }
+
+        document.addEventListener('DOMContentLoaded', initCustomSelect);
+
+        // --- OSMD GLOBALS ---
+        let osmd = null;
+        let currentBpm = 120;
+        let currentAudioOffset = 0.0;
+        let currentData = null;
+        let syncAnimationFrame = null;
+        let itemToDeleteId = null;
+        
+        let cursorTimestamps = [];
+        let currentCursorIndex = 0;
+        let isAutoScrolling = true;
+        let transcriptionInterval = null;
+        let uploadController = null;
+
+        // --- Custom Audio Player Logic ---
+        function initCustomAudioPlayer() {
+            const audio = document.getElementById('audioPlayer');
+            const btnPlayPause = document.getElementById('btnPlayPause');
+            const iconPlay = document.getElementById('iconPlay');
+            const iconPause = document.getElementById('iconPause');
+            const btnRewind = document.getElementById('btnRewind');
+            const btnForward = document.getElementById('btnForward');
+            const scrubber = document.getElementById('audioScrubber');
+            const timeCurrent = document.getElementById('timeCurrent');
+            const timeTotal = document.getElementById('timeTotal');
+            const playbackSpeed = document.getElementById('playbackSpeed');
+
+            let isDragging = false;
+
+            function formatTime(seconds) {
+                if (isNaN(seconds) || !isFinite(seconds)) return "0:00";
+                const m = Math.floor(seconds / 60);
+                const s = Math.floor(seconds % 60);
+                return `${m}:${s < 10 ? '0' : ''}${s}`;
+            }
+
+            // Updates the gradient of the range slider track
+            function updateScrubberFill(value, max) {
+                if (max === 0) return;
+                const progress = (value / max) * 100;
+                scrubber.style.background = `linear-gradient(to right, #0ea5e9 ${progress}%, #082f49 ${progress}%)`;
+            }
+
+            btnPlayPause.addEventListener('click', () => {
+                if (audio.paused) {
+                    audio.play();
+                } else {
+                    audio.pause();
+                }
+            });
+
+            audio.addEventListener('play', () => {
+                iconPlay.classList.add('hidden');
+                iconPause.classList.remove('hidden');
+            });
+
+            audio.addEventListener('pause', () => {
+                iconPlay.classList.remove('hidden');
+                iconPause.classList.add('hidden');
+            });
+
+            btnRewind.addEventListener('click', () => {
+                audio.currentTime = Math.max(0, audio.currentTime - 30);
+            });
+
+            btnForward.addEventListener('click', () => {
+                audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 30);
+            });
+
+            playbackSpeed.addEventListener('change', (e) => {
+                audio.playbackRate = parseFloat(e.target.value);
+            });
+
+            audio.addEventListener('loadedmetadata', () => {
+                scrubber.max = audio.duration;
+                timeTotal.innerText = formatTime(audio.duration);
+                updateScrubberFill(audio.currentTime, audio.duration);
+            });
+
+            audio.addEventListener('timeupdate', () => {
+                if (!isDragging) {
+                    scrubber.value = audio.currentTime;
+                    updateScrubberFill(audio.currentTime, audio.duration);
+                }
+                timeCurrent.innerText = formatTime(audio.currentTime);
+            });
+
+            // Handle scrubbing gracefully
+            scrubber.addEventListener('mousedown', () => isDragging = true);
+            scrubber.addEventListener('touchstart', () => isDragging = true, {passive: true});
+            
+            document.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    audio.currentTime = scrubber.value;
+                    isDragging = false;
+                }
+            });
+            document.addEventListener('touchend', () => {
+                if (isDragging) {
+                    audio.currentTime = scrubber.value;
+                    isDragging = false;
+                }
+            });
+
+            scrubber.addEventListener('input', (e) => {
+                timeCurrent.innerText = formatTime(e.target.value);
+                updateScrubberFill(e.target.value, audio.duration);
+                
+                // If the user isn't actively dragging but clicking on a spot, apply seek instantly
+                if (!isDragging) {
+                    audio.currentTime = e.target.value;
+                }
+            });
+        }
+        document.addEventListener('DOMContentLoaded', initCustomAudioPlayer);
+
+        // --- DELETE MODAL LOGIC ---
+        function openDeleteModal(event, id) {
+            if (event) event.stopPropagation(); 
+            itemToDeleteId = id;
+            document.getElementById("deleteModal").classList.remove("hidden");
+        }
+
+        function closeDeleteModal() {
+            itemToDeleteId = null;
+            document.getElementById("deleteModal").classList.add("hidden");
+        }
+
+        async function confirmDelete() {
+            if (!itemToDeleteId) return;
+            try {
+                const response = await fetch(`/delete/${itemToDeleteId}`, { method: 'DELETE' });
+                if (response.ok) {
+                    closeDeleteModal();
+                    loadHistory(); 
+                } else {
+                    console.error("Failed to delete item from server.");
+                }
+            } catch (err) {
+                console.error("Network error while deleting: ", err);
+            }
+        }
+
+        function stopAutoScroll(e) {
+            const audio = document.getElementById("audioPlayer");
+            const onPlayerPage = !document.getElementById("playerPage").classList.contains("hidden");
+            
+            if (isAutoScrolling && onPlayerPage && audio && !audio.paused) {
+                isAutoScrolling = false;
+                const syncBtn = document.getElementById("syncBtn");
+                syncBtn.classList.remove("translate-y-32", "opacity-0", "pointer-events-none");
+            }
+        }
+
+        window.addEventListener('wheel', stopAutoScroll, { passive: true });
+        window.addEventListener('touchmove', stopAutoScroll, { passive: true });
+        window.addEventListener('mousedown', (e) => {
+            if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'AUDIO' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'OPTION' && !e.target.closest('button')) {
+                stopAutoScroll(e);
+            }
+        }, { passive: true });
+
+        function resumeSync() {
+            isAutoScrolling = true;
+            document.getElementById("syncBtn").classList.add("translate-y-32", "opacity-0", "pointer-events-none");
+
+            if (osmd && osmd.cursor && osmd.cursor.cursorElement) {
+                const cursorRect = osmd.cursor.cursorElement.getBoundingClientRect();
+                const absoluteCursorTop = window.scrollY + cursorRect.top;
+                const targetScrollY = absoluteCursorTop - (window.innerHeight * 0.4);
+                window.scrollTo({ top: targetScrollY, behavior: 'smooth' });
+            }
+        }
+
+        function initOSMD() {
+            const container = document.getElementById("osmd-container");
+            container.innerHTML = ""; 
+            osmd = null;
+            
+            osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay("osmd-container", {
+                backend: "svg",
+                drawTitle: false,
+                followCursor: false, 
+                autoResize: true,
+                drawingParameters: "default"
+            });
+        }
+
+        function triggerDownload(url, filename) {
+            if (!url) return;
+            if (window.pywebview && window.pywebview.api) {
+                window.pywebview.api.trigger_native_download(filename);
+            } else {
+                console.warn("PyWebView API not available. Navigating to standard download...");
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
+        }
+
+        function applyCursorStyles() {
+            if (osmd && osmd.cursor && osmd.cursor.cursorElement) {
+                const el = osmd.cursor.cursorElement;
+                
+                el.style.setProperty('z-index', '100', 'important');
+                el.style.setProperty('opacity', '0.8', 'important'); 
+                
+                // Sky Blue magical tracking cursor
+                el.style.setProperty('background-color', '#0ea5e9', 'important'); 
+                el.style.setProperty('box-shadow', '0 0 12px rgba(14, 165, 233, 0.9)', 'important');
+                
+                el.style.setProperty('width', '5px', 'important');
+                el.style.setProperty('height', '65px', 'important'); 
+                
+                el.style.setProperty('border', 'none', 'important');
+                el.style.setProperty('border-radius', '4px', 'important');
+                el.style.setProperty('display', 'block', 'important');
+                
+                el.style.setProperty('transform', 'translate(-12px, -12px)', 'important');
+                el.style.setProperty('transition', 'left 0.15s cubic-bezier(0.4, 0, 0.2, 1), top 0.15s cubic-bezier(0.4, 0, 0.2, 1)', 'important');
+                
+                if (el.tagName.toLowerCase() === 'img') {
+                    const transparentPixel = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+                    if (el.src !== transparentPixel) {
+                        el.src = transparentPixel;
+                    }
+                }
+            }
+        }
+
+        function syncCursorToAudio() {
+            if (!osmd || !osmd.cursor || cursorTimestamps.length === 0) return;
+
+            const audio = document.getElementById("audioPlayer");
+            const secondsPerBeat = 60.0 / currentBpm;
+            
+            // Adjust current time based on the first detected note offset
+            const adjustedTime = Math.max(0, audio.currentTime - currentAudioOffset);
+            const currentBeat = adjustedTime / secondsPerBeat;
+            const targetOSMDTime = currentBeat / 4.0;
+
+            let targetIndex = 0;
+            for (let i = 0; i < cursorTimestamps.length; i++) {
+                if (cursorTimestamps[i] <= targetOSMDTime + 0.01) { 
+                    targetIndex = i;
+                } else {
+                    break;
+                }
+            }
+
+            if (targetIndex !== currentCursorIndex) {
+                if (targetIndex < currentCursorIndex) {
+                    osmd.cursor.reset();
+                    currentCursorIndex = 0;
+                }
+                
+                let steps = targetIndex - currentCursorIndex;
+                for (let i = 0; i < steps; i++) {
+                    if (!osmd.cursor.iterator.EndReached) osmd.cursor.next();
+                }
+                currentCursorIndex = targetIndex;
+                applyCursorStyles();
+            }
+
+            if (isAutoScrolling && !audio.paused && osmd.cursor.cursorElement && osmd.cursor.cursorElement.style.display !== "none") {
+                const cursorRect = osmd.cursor.cursorElement.getBoundingClientRect();
+                const absoluteCursorTop = window.scrollY + cursorRect.top;
+                const targetScrollY = absoluteCursorTop - (window.innerHeight * 0.4);
+
+                if (Math.abs(window.scrollY - targetScrollY) > 2) {
+                    const newScroll = window.scrollY + (targetScrollY - window.scrollY) * 0.08;
+                    window.scrollTo(0, newScroll);
+                }
+            }
+        }
+
+        function startSyncLoop() {
+            function loop() {
+                const audio = document.getElementById("audioPlayer");
+                if (!audio.paused) {
+                    syncCursorToAudio();
+                }
+                syncAnimationFrame = requestAnimationFrame(loop);
+            }
+            if (syncAnimationFrame) cancelAnimationFrame(syncAnimationFrame);
+            syncAnimationFrame = requestAnimationFrame(loop);
+        }
+
+        function setupAudioSync() {
+            const audio = document.getElementById("audioPlayer");
+            
+            audio.addEventListener('play', () => {
+                if (osmd && osmd.cursor) osmd.cursor.show();
+                isAutoScrolling = true;
+                document.getElementById("syncBtn").classList.add("translate-y-32", "opacity-0", "pointer-events-none");
+                startSyncLoop();
+            });
+
+            audio.addEventListener('pause', () => {
+                if (syncAnimationFrame) cancelAnimationFrame(syncAnimationFrame);
+                document.getElementById("syncBtn").classList.add("translate-y-32", "opacity-0", "pointer-events-none");
+            });
+
+            audio.addEventListener('ended', () => {
+                if (osmd && osmd.cursor) {
+                    osmd.cursor.reset();
+                    currentCursorIndex = 0;
+                }
+                if (syncAnimationFrame) cancelAnimationFrame(syncAnimationFrame);
+            });
+            
+            audio.addEventListener('seeked', () => {
+                if (audio.paused) syncCursorToAudio();
+            });
+        }
+
+        async function loadPlayer(data) {
+            currentData = data;
+            document.getElementById("homePage").classList.add("hidden");
+            document.getElementById("playerPage").classList.remove("hidden");
+            document.getElementById("playerPage").classList.add("flex");
+
+            document.getElementById("songTitle").innerText = data.name;
+            document.getElementById("songBpm").innerText = Math.round(data.bpm) + " BPM";
+            currentBpm = data.bpm || 120;
+            currentAudioOffset = data.audio_offset || 0.0;
+
+            const btnPdf = document.getElementById("btnPdf");
+            if (data.pdf_url) btnPdf.classList.remove("hidden");
+            else btnPdf.classList.add("hidden");
+            
+            const audio = document.getElementById("audioPlayer");
+            
+            // Reset player UI state when new track loads
+            document.getElementById("iconPlay").classList.remove("hidden");
+            document.getElementById("iconPause").classList.add("hidden");
+            document.getElementById("audioScrubber").value = 0;
+            document.getElementById("audioScrubber").style.background = `linear-gradient(to right, #0ea5e9 0%, #082f49 0%)`;
+            document.getElementById("timeCurrent").innerText = "0:00";
+            document.getElementById("playbackSpeed").value = "1";
+            audio.playbackRate = 1;
+            
+            audio.src = data.audio_url;
+            audio.load();
+
+            initOSMD();
+            
+            try {
+                document.getElementById("sheetLoading").classList.remove("hidden");
+                
+                await osmd.load(data.xml_url);
+                await osmd.render();
+                
+                document.getElementById("sheetLoading").classList.add("hidden");
+                
+                cursorTimestamps = [];
+                osmd.cursor.hide(); 
+                osmd.cursor.reset();
+                while (!osmd.cursor.iterator.EndReached) {
+                    if (osmd.cursor.iterator.currentTimeStamp) {
+                        cursorTimestamps.push(osmd.cursor.iterator.currentTimeStamp.RealValue);
+                    }
+                    osmd.cursor.next();
+                }
+                
+                osmd.cursor.reset();
+                currentCursorIndex = 0;
+                osmd.cursor.show(); 
+                applyCursorStyles();
+                
+                resumeSync();
+                // Ensure sync is connected
+                setupAudioSync();
+            } catch (err) {
+                document.getElementById("sheetLoading").classList.add("hidden");
+                document.getElementById("osmd-container").innerHTML = `
+                    <div class="p-8 text-center border-2 border-red-500 rounded-xl bg-red-900/20 mt-4 fade-in">
+                        <h3 class="text-xl font-bold text-red-400 mb-2">Error Rendering Sheet Music</h3>
+                        <p class="text-red-200/80">The renderer failed to parse the MusicXML file.</p>
+                        <p class="text-xs text-red-400/50 mt-2 font-mono">Technical detail: ${err.message || err}</p>
+                    </div>`;
+                console.error(err);
+            }
+        }
+
+        function goHome() {
+            document.getElementById("playerPage").classList.add("hidden");
+            document.getElementById("playerPage").classList.remove("flex");
+            document.getElementById("homePage").classList.remove("hidden");
+            
+            const audio = document.getElementById("audioPlayer");
+            audio.pause();
+            audio.currentTime = 0;
+            if (syncAnimationFrame) cancelAnimationFrame(syncAnimationFrame);
+            
+            isAutoScrolling = true;
+            document.getElementById("syncBtn").classList.add("translate-y-32", "opacity-0", "pointer-events-none");
+            
+            loadHistory();
+        }
+
+        async function cancelTranscription() {
+            try {
+                const cancelBtn = document.getElementById("cancelBtn");
+                cancelBtn.disabled = true;
+                cancelBtn.classList.remove("hover:bg-red-500/20", "hover:border-red-500/30", "hover:text-red-400");
+                cancelBtn.classList.add("opacity-50", "cursor-not-allowed", "text-blue-200", "border-white/10");
+                cancelBtn.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Cancelling...`;
+                
+                await fetch("/transcription/cancel", { method: "POST" });
+                
+                if (uploadController) {
+                    uploadController.abort();
+                }
+                
+                document.getElementById("blockingOverlay").classList.add("hidden");
+                clearInterval(transcriptionInterval);
+            } catch(e) {
+                console.error("Failed to cancel", e);
+            }
+        }
+        
+        async function pollProgress() {
+            try {
+                const res = await fetch("/transcription/progress");
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.active) {
+                        document.getElementById("progressBarFill").style.width = `${data.progress}%`;
+                        document.getElementById("progressMessage").innerText = data.message;
+                    }
+                }
+            } catch(e) {
+                console.error("Progress polling failed");
+            }
+        }
+
+        document.getElementById("uploadForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const errorMsg = document.getElementById("errorMsg");
+            const blockingOverlay = document.getElementById("blockingOverlay");
+            
+            // Reset Progress UI
+            document.getElementById("progressBarFill").style.width = "0%";
+            document.getElementById("progressMessage").innerText = "Preparing audio...";
+            document.getElementById("cancelBtn").disabled = false;
+            document.getElementById("cancelBtn").innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg> Cancel`;
+
+            // Block all screen actions
+            blockingOverlay.classList.remove("hidden");
+            errorMsg.classList.add("hidden");
+            
+            transcriptionInterval = setInterval(pollProgress, 1000);
+            uploadController = new AbortController();
+
+            const formData = new FormData();
+            formData.append("audio", document.getElementById("audioFile").files[0]);
+            formData.append("instrument", document.getElementById("instrument").value);
+
+            try {
+                const response = await fetch("/upload", { 
+                    method: "POST", 
+                    body: formData,
+                    signal: uploadController.signal
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    if (data.cancelled) {
+                        // User cancelled
+                    } else {
+                        loadPlayer(data);
+                    }
+                } else {
+                    errorMsg.innerText = "Oops! " + data.error;
+                    errorMsg.classList.remove("hidden");
+                }
+            } catch (err) {
+                if (err.name === 'AbortError') {
+                    console.log('Upload aborted by user');
+                } else {
+                    errorMsg.innerText = "Network connection lost!";
+                    errorMsg.classList.remove("hidden");
+                }
+            } finally {
+                clearInterval(transcriptionInterval);
+                blockingOverlay.classList.add("hidden");
+                
+                // Refresh history in case we successfully saved one
+                loadHistory();
+            }
+        });
+
+        async function loadHistory() {
+            try {
+                const res = await fetch("/history");
+                const history = await res.json();
+                const list = document.getElementById("historyList");
+                list.innerHTML = "";
+                
+                if (history.length === 0) {
+                    list.innerHTML = '<p class="text-blue-300/50 italic font-medium w-full text-center col-span-1 md:col-span-2 py-8">Your musical journey is empty. Upload a track to begin!</p>';
+                    return;
+                }
+
+                history.forEach(item => {
+                    const card = document.createElement("div");
+                    card.className = "glass-card group p-5 rounded-2xl flex justify-between items-center cursor-pointer hover:bg-white/5 transition-all shadow-lg hover:shadow-cyan-500/10 fade-in relative transform hover:-translate-y-1";
+                    
+                    card.innerHTML = `
+                        <div class="overflow-hidden w-full pr-28 flex items-center gap-4">
+                            <div class="bg-gradient-to-br from-cyan-500/20 to-blue-600/20 p-3 rounded-full hidden sm:block border border-cyan-500/20 flex-shrink-0">
+                                <svg class="w-6 h-6 text-cyan-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <h3 class="font-bold text-blue-50 truncate text-lg block">${item.name}</h3>
+                                <p class="text-sm font-semibold text-cyan-300/80 truncate block">${item.instrument} • <span class="text-blue-300/60">${Math.round(item.bpm)} BPM</span></p>
+                            </div>
+                        </div>
+                        
+                        <div class="absolute right-5 flex items-center gap-3">
+                            <button class="delete-btn text-red-400 hover:text-white hover:bg-red-500 p-2.5 rounded-full opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all duration-300 shadow-lg bg-black/40 border border-red-500/30" title="Delete">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                            <div class="bg-white/10 p-2.5 rounded-full group-hover:bg-cyan-500 transition-colors duration-300 shadow-lg border border-white/10 group-hover:border-cyan-400">
+                                <svg class="w-5 h-5 text-blue-200 group-hover:text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                            </div>
+                        </div>
+                    `;
+                    
+                    card.onclick = () => loadPlayer(item);
+                    
+                    const deleteBtn = card.querySelector('.delete-btn');
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation(); 
+                        openDeleteModal(e, item.id);
+                    };
+                    
+                    list.appendChild(card);
+                });
+            } catch(e) { console.error("Could not load history", e); }
+        }
+
+        async function checkSystemStatus() {
+            try {
+                const res = await fetch('/status');
+                const data = await res.json();
+                if (!data.musescore_installed) {
+                    document.getElementById('musescoreAlert').classList.remove('hidden');
+                }
+            } catch (err) {
+                console.error("Could not fetch system status", err);
+            }
+        }
+
+        loadHistory();
+        checkSystemStatus();
+    </script>
+</body>
+</html>

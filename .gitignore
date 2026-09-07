@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+venv/
+.env
+
+# Build artifacts
+build/
+dist/
+*.spec
+*.bat
+*.iss
+installer_output/
+installer_output.zip
+
+# Runtime data
+data/
+
+# OS files
+Thumbs.db
+.DS_Store

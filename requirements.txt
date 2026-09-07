@@ -1,0 +1,11 @@
+numpy==1.26.4
+librosa==0.11.0
+soundfile==0.13.1
+pretty-midi==0.2.10
+flask==3.0.0
+pywebview==6.2.1
+basic-pitch==0.4.0
+music21==9.7.1
+tensorflow==2.15.0
+werkzeug>=3.0.0
+demucs==0.2.11
