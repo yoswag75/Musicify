@@ -224,12 +224,6 @@ Contributions are welcome. To get started:
 
 ---
 
-## License
-
-This project is licensed under the [MIT License](LICENSE).
-
----
-
 <p align="center">
   Built with ♪ by the Musicify team
 </p>
